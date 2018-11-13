@@ -157,4 +157,4 @@ if (run_process_script) {
 ################################################################################
 # Run Model
 
-source("../FAPI_vgg16_augment_onehot_automation.R")
+source("../vgg16_augment_onehot_automation.R")

@@ -175,6 +175,12 @@ validation$features <- reshape_features(validation$features)
 test$features <- reshape_features(test$features)
 
 
+class_quantities <- apply(train$labels, 2, sum)
+class_proportions <- class_quantities / sum(class_quantities)
+class_weights <- ((1/class_proportions) / sum(1/class_proportions)) %>%
+  as.list() %>%
+  set_names(classes)
+
 model <- keras_model_sequential() %>%
   layer_dense(
     units = 256, activation = "relu",
@@ -193,7 +199,8 @@ history <- model %>% fit(
   train$features, train$labels,
   epochs = epochs,
   batch_size = 20,
-  validation_data = list(validation$features, validation$labels)
+  validation_data = list(validation$features, validation$labels),
+  class_weight = class_weights
 )
 
 
@@ -202,6 +209,7 @@ plot(history)
 dev.off()
 
 save_model_hdf5(model, name_file(start_date, ".h5"))
+save_model_weights_hdf5(model, name_file(start_date, "-weights.h5"))
 
 preds <- model %>% predict(test$features)
 test_labs <- test$labels
@@ -210,4 +218,3 @@ colnames(preds) <- colnames(test_labs) <- classes
 save(classes, preds, test_labs, file = name_file(start_date, ".Rdata"))
 base::save.image(name_file(start_date, "fullimage.rdata"))
 
-tfdeploy::export_savedmodel(model, name_file(start_date, ""))
