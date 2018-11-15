@@ -179,7 +179,7 @@ class_quantities <- apply(train$labels, 2, sum)
 class_proportions <- class_quantities / sum(class_quantities)
 class_weights <- ((1/class_proportions) / sum(1/class_proportions)) %>%
   as.list() %>%
-  set_names(classes)
+  set_names(as.character(1:length(class_quantities) - 1))
 
 model <- keras_model_sequential() %>%
   layer_dense(
