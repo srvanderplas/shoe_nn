@@ -24,7 +24,7 @@ if (!exists("process_dir")) {
 }
 
 if (!exists("aug_multiple")) {
-  aug_multiple <- 3
+  aug_multiple <- 1
 }
 
 if (!exists("epochs")) {
@@ -58,9 +58,14 @@ name_file <- function(date, ext) {
 
 base_dir <- file.path("/models/shoe_nn/RProcessedImages", process_dir)
 train_dir <- file.path(base_dir, "train")
-train_aug_dir <- file.path(base_dir, "train")
+train_aug_dir <- file.path(base_dir, "train_aug")
 validation_dir <- file.path(base_dir, "validation")
 test_dir <- file.path(base_dir, "test")
+
+if (!dir.exists(train_dir)) dir.create(train_dir)
+if (!dir.exists(train_aug_dir)) dir.create(train_aug_dir)
+if (!dir.exists(validation_dir)) dir.create(validation_dir)
+if (!dir.exists(test_dir)) dir.create(test_dir)
 
 n_train <- length(list.files(train_dir))
 n_validation <- length(list.files(validation_dir))
@@ -84,6 +89,9 @@ augment_img <- function(filename, times = 3) {
     newfilepath <- filename
     newfilename <- basename(filename) %>% str_remove("\\.jpg")
   }
+
+  # nfiles <- list.files(newfilepath, pattern = newfilename)
+  # print(nfiles)
 
   img <- readJPEG(newfilepath)
   dim(img) <- c(1, dim(img))
@@ -120,9 +128,24 @@ augment_img <- function(filename, times = 3) {
   }
 }
 
+# Remove augmented files
+file.remove(list.files(train_dir, "^aug_", full.names = T))
+
+# re-augment
 for (i in list.files(train_dir, full.names = T)) {
-  augment_img(i, times = aug_multiple)
+  match_files <- list.files(path = dirname(i), pattern = paste0("aug_", str_replace(basename(i), "^\\d\\+", "")), full.names = T)
+  nfiles <- length(match_files)
+
+  if (nfiles > aug_multiple) {
+    keep <- sample(match_files, size = aug_multiple)
+    file.remove(match_files[!match_files %in% keep])
+  } else {
+    augment_img(i, times = aug_multiple - nfiles)
+  }
 }
+
+list.files(train_aug_dir, full.names = T) %>%
+  file.symlink(., str_replace(., train_aug_dir, train_dir))
 
 
 get_labs <- function(directory, verbose = F) {
@@ -132,10 +155,10 @@ get_labs <- function(directory, verbose = F) {
   files <- list.files(directory)
 
   for (i in 1:sample_count) {
-    if (verbose) cat(paste(i, ", ", sep=""))
+    if (verbose) cat(paste(i, ", ", sep = ""))
 
     fname <- files[i]
-    str <- substr(fname, 1, regexpr("-",fname)-1)
+    str <- substr(fname, 1, regexpr("-",fname) - 1)
     for (j in 1:length(classes)) {
       labels[i, j] <- grepl(classes[j], str)
     }
@@ -173,6 +196,7 @@ train <- dir_to_data(train_dir, verbose = T)
 validation <- dir_to_data(validation_dir, verbose = T)
 test <- dir_to_data(test_dir, verbose = T)
 
+# save(train, validation, test, file = name_file(start_date, "train-valid-test-data.Rdata"))
 
 
 input <- layer_input(shape = c(256, 256, 3))
@@ -184,7 +208,7 @@ conv_base <- application_vgg16(
 
 output <- conv_base$output %>%
   layer_flatten(input_shape = input) %>%
-  layer_dense(units = 256, activation = "relu",
+  layer_dense(units = length(classes)^2, activation = "relu",
     input_shape = 8 * 8 * 512
   ) %>%
   layer_dropout(rate = 0.5) %>%
@@ -195,7 +219,7 @@ model <- keras_model(input, output)
 freeze_weights(model, from = 1, to = 'block5_conv3')
 
 model %>% compile(
-  optimizer = optimizer_rmsprop(lr = 2e-5),
+  optimizer = optimizer_sgd(lr= .01),
   loss = "binary_crossentropy",
   metrics = c("accuracy")
 )
@@ -203,7 +227,8 @@ model %>% compile(
 history <- model %>% fit(
   train$data, train$labels,
   epochs = epochs,
-  batch_size = 20,
+  batch_size = 64,
+  shuffle = T,
   validation_data = list(validation$data, validation$labels)
 )
 
@@ -211,6 +236,8 @@ history <- model %>% fit(
 png(filename = name_file(start_date, ".png"), width = 1000, height = 1000, type = "cairo", pointsize = 16)
 plot(history)
 dev.off()
+
+save_model_weights_hdf5(model, name_file(start_date, "_model.h5"))
 
 save_model_hdf5(model, name_file(start_date, ".h5"))
 
