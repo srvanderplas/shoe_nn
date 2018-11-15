@@ -85,6 +85,8 @@ if (run_process_script) {
 # Run processing script
 source(file.path(code_dir, "Processing.R"))
 
+system(sprintf("chmod -R 777 %s", process_dir))
+
 ################################################################################
 # Split into training/test/validation sets
 
