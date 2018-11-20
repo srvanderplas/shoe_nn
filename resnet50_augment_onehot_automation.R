@@ -41,7 +41,7 @@ model_dir <- file.path(work_dir, process_dir)
 dir.create(model_dir)
 
 name_file <- function(date, ext) {
-  pretrained_base <- "vgg16"
+  pretrained_base <- "resnet50"
   mod_type <- "onehotaug"
   nclass <- paste0(length(classes), "class")
   pixel_size <- "256"
@@ -124,7 +124,7 @@ for (i in list.files(train_dir, full.names = T)) {
   augment_img(i, times = aug_multiple)
 }
 
-conv_base <- application_vgg16(
+conv_base <- application_resnet50(
   weights = "imagenet",
   include_top = FALSE,
   input_shape = c(256, 256, 3)
@@ -135,7 +135,7 @@ extract_features2 <- function(directory, verbose = F) {
   files <- list.files(directory)
   sample_count <- length(files)
 
-  features <- array(0, dim = c(sample_count, 8, 8, 512))
+  features <- array(0, dim = c(sample_count, 8, 8, 2048))
   labels <- array(0, dim = c(sample_count, length(classes)))
 
   cat(paste0("Sample count = ", sample_count, ". "))
@@ -167,7 +167,7 @@ test <- extract_features2(test_dir, verbose = T)
 
 
 reshape_features <- function(features) {
-  array_reshape(features, dim = c(nrow(features), 8 * 8 * 512))
+  array_reshape(features, dim = c(nrow(features), 8 * 8 * 2048))
 }
 
 train$features <- reshape_features(train$features)
@@ -187,7 +187,7 @@ class_weights <- (sqrt(1/class_proportions) / sum(sqrt(1/class_proportions))) %>
 model <- keras_model_sequential() %>%
   layer_dense(
     units = 256, activation = "relu",
-    input_shape = 8 * 8 * 512
+    input_shape = 8 * 8 * 2048
   ) %>%
   layer_dropout(rate = 0.5) %>%
   layer_dense(units = length(classes), activation = "sigmoid")
