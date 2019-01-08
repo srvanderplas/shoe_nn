@@ -28,7 +28,7 @@ if (!exists("aug_multiple")) {
 }
 
 if (!exists("epochs")) {
-  epochs <- 15
+  epochs <- 30
 }
 
 process_dir <- gsub("[[:punct:]]models[[:punct:]]shoe_nn[[:punct:]]RProcessedImages[[:punct:]]{1,}", "\\1", process_dir)

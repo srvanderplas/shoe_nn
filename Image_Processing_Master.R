@@ -19,13 +19,13 @@ wd <- setwd("/models/shoe_nn/RProcessedImages")
 image_dir <- "../LabelMe/Images/Shoes/"
 annot_dir <- "../LabelMe/Annotations/Shoes/"
 code_dir <- "../LabelMe/Code/"
-split_prop <- c(.7, .15, .15)
+split_prop <- c(.6, .2, .2)
 classes <- c(
   "bowtie", "chevron", "circle", "line", "polygon",
   "quad", "star", "text", "triangle"
 )
 aug_multiple <- 1
-epochs <- 15
+epochs <- 30
 
 ################################################################################
 # Packages
