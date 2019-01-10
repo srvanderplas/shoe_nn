@@ -120,7 +120,7 @@ augment_img <- function(filename, times = 3) {
   }
 }
 
-for (i in list.files(train_dir, full.names = T)) {
+for (i in list.files(train_dir, "*.jpg", full.names = T)) {
   augment_img(i, times = aug_multiple)
 }
 
