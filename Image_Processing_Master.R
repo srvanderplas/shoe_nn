@@ -121,39 +121,41 @@ if (run_process_script) {
   dir.create(file.path(getwd(), process_dir, train_dir))
   # Sample training images to get approximately equal numbers of each class
   training_all <- list.files(file.path(process_dir, "train_all"), full.names = T)
-  training_class <- data_frame(file = training_all) %>%
-    mutate(class = purrr::map(basename(file), function(x) {
-      str_extract(x, "^([a-z\\(\\)RE_]*)") %>%
-        str_replace_all("\\([RE]\\)", "") %>%
-        str_split("_", simplify = F)
-    })) %>%
-    tidyr::unnest() %>%
-    tidyr::unnest() %>%
-    group_by(file) %>%
-    mutate(weight = 1/n()) %>%
-    ungroup() %>%
-    mutate(recode = !class %in% classes,
-           class = ifelse(recode, "other", class))
-  sample_threshold <- training_class %>%
-    group_by(class) %>%
-    summarize(n = n()) %>%
-    magrittr::extract2("n") %>% quantile(.25) %>% round()
-  training_class_sample <- training_class %>%
-    group_by(class) %>%
-    sample_n(size = sample_threshold, replace = T, weight = weight) %>%
-    ungroup() %>%
-    select(file) %>% extract2("file")
-
-  training_class_sample <- training_class_sample %>% table %>% as.data.frame(stringsAsFactors = F) %>%
-    rename(.data = ., file = `.`, weight = Freq)
-
-  newfilename <- ifelse(training_class_sample$weight == 1, basename(training_class_sample$file),
-                        paste0(training_class_sample$weight, "+", basename(training_class_sample$file)))
-
-
-
-  file.symlink(from = file.path("/models", "shoe_nn", "RProcessedImages", str_replace(training_class_sample$file, "train_all", "images")),
-               to = file.path(process_dir, train_dir, newfilename))
+  # training_class <- data_frame(file = training_all) %>%
+  #   mutate(class = purrr::map(basename(file), function(x) {
+  #     str_extract(x, "^([a-z\\(\\)RE_]*)") %>%
+  #       str_replace_all("\\([RE]\\)", "") %>%
+  #       str_split("_", simplify = F)
+  #   })) %>%
+  #   tidyr::unnest() %>%
+  #   tidyr::unnest() %>%
+  #   group_by(file) %>%
+  #   mutate(weight = 1/n()) %>%
+  #   ungroup() %>%
+  #   mutate(recode = !class %in% classes,
+  #          class = ifelse(recode, "other", class))
+  # sample_threshold <- training_class %>%
+  #   group_by(class) %>%
+  #   summarize(n = n()) %>%
+  #   magrittr::extract2("n") %>% quantile(.25) %>% round()
+  # training_class_sample <- training_class %>%
+  #   group_by(class) %>%
+  #   sample_n(size = sample_threshold, replace = T, weight = weight) %>%
+  #   ungroup() %>%
+  #   select(file) %>% extract2("file")
+  #
+  # training_class_sample <- training_class_sample %>% table %>% as.data.frame(stringsAsFactors = F) %>%
+  #   rename(.data = ., file = `.`, weight = Freq)
+  #
+  # newfilename <- ifelse(training_class_sample$weight == 1, basename(training_class_sample$file),
+  #                       paste0(training_class_sample$weight, "+", basename(training_class_sample$file)))
+  #
+  #
+  #
+  # file.symlink(from = file.path("/models", "shoe_nn", "RProcessedImages", str_replace(training_class_sample$file, "train_all", "images")),
+  #              to = file.path(process_dir, train_dir, newfilename))
+  file.symlink(from = file.path("/models", "shoe_nn", "RProcessedImages", str_replace(training_all, "train_all", "images")),
+               to = file.path(process_dir, train_dir, basename(training_all)))
 }
 
 ################################################################################
