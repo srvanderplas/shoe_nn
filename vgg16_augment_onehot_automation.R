@@ -175,14 +175,14 @@ validation$features <- reshape_features(validation$features)
 test$features <- reshape_features(test$features)
 
 
-class_quantities <- apply(train$labels, 2, sum)
-class_proportions <- class_quantities / sum(class_quantities)
-# class_weights <- (1/class_proportions) / sum(1/class_proportions)) %>%
+class_quantities <- colSums(train$labels)
+class_proportions <- (1/class_quantities)/sum(1/class_quantities)
+class_weights <- class_proportions %>%
+  as.list() %>%
+  set_names(as.character(1:length(class_proportions) - 1))
+# class_weights <- (sqrt(1/class_proportions) / sum(sqrt(1/class_proportions))) %>%
 #   as.list() %>%
 #   set_names(as.character(1:length(class_quantities) - 1))
-class_weights <- (sqrt(1/class_proportions) / sum(sqrt(1/class_proportions))) %>%
-  as.list() %>%
-  set_names(as.character(1:length(class_quantities) - 1))
 
 model <- keras_model_sequential() %>%
   layer_dense(
