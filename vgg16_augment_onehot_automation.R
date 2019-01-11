@@ -221,3 +221,5 @@ colnames(preds) <- colnames(test_labs) <- classes
 save(classes, preds, test_labs, file = name_file(start_date, ".Rdata"))
 base::save.image(name_file(start_date, "fullimage.rdata"))
 
+save(history, file = name_file(start_date, "-history.Rdata"))
+
