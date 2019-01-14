@@ -70,6 +70,8 @@ set_weights <- function(model_wts_file) {
   load_model_weights_hdf5(model, model_wts_file, by_name = T)
 }
 
+
+# --- # Heatmaps # -------------------------------------------------------------
 calc_heatmap <- function(img_path, model, classes = default_classes, scale_by_prob = F) {
   img <- jpeg::readJPEG(img_path)
   dim(img) <- c(1, dim(img))
@@ -227,4 +229,33 @@ create_composite <- function(heatmap_data, save_file = F, outdir = ".", td = tem
 #
 # test_images <- list.files(file.path(image_dir, "test"), "*.jpg", full.names = T)
 # loaded_model <- set_weights(model_wts_file)
-#
+
+
+# --- # Confusion Matrices # ---------------------------------------------------
+# with(get_newest(), load(file.path(path, base_file)))
+
+get_confusion_row <- function(i, test_labels, predictions, threshold = 0.2) {
+  stopifnot(i > 0, i <= ncol(test_labels))
+
+  true_i <- test_labels[,i] == 1
+
+  class_rel <- as.data.frame(colSums(test_labs[true_i,]))
+
+  preds_i <- predictions
+  # Set prediction to NA if it's correct but not in the ith column
+  test_i_na <- test_labels + 1
+  test_i_na[test_i_na > 1] <- NA
+  preds_i[, -i] <- test_i_na[, -i]*preds[, -i]
+
+  metric <- as.data.frame(colMeans(preds_i[true_i,] >= threshold, na.rm = T))
+
+  return(list(class_rel = class_rel, metric = metric))
+}
+
+get_confusion_matrix <- function(predictions, test_labels, classes, threshold = 0.2) {
+  res <- purrr::map(1:length(classes), get_confusion_row,
+                    test_labels = test_labels, predictions = predictions,
+                    threshold = threshold)
+
+
+}
