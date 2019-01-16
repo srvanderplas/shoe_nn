@@ -74,6 +74,10 @@ set_weights <- function(model_wts_file) {
 
 # --- # Heatmaps # -------------------------------------------------------------
 calc_heatmap <- function(img_path, model, classes = default_classes, scale_by_prob = F) {
+  if (length(img_path) > 1) {
+    img_path <- img_path[1]
+    warning("Using only the first image")
+  }
   img <- jpeg::readJPEG(img_path)
   dim(img) <- c(1, dim(img))
 
