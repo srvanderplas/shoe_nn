@@ -7,6 +7,7 @@ library(imager)
 library(tidyr)
 library(magick)
 library(viridis)
+library(ggcorrplot)
 
 # --- Variables ----------------------------------------------------------------
 default_classes <- c(
@@ -234,12 +235,19 @@ create_composite <- function(heatmap_data, save_file = F, outdir = ".", td = tem
 # --- # Confusion Matrices # ---------------------------------------------------
 # with(get_newest(), load(file.path(path, base_file)))
 
-get_confusion_row <- function(i, test_labels, predictions, threshold = 0.2) {
+get_image_count_row <- function(i, test_labels) {
   stopifnot(i > 0, i <= ncol(test_labels))
 
   true_i <- test_labels[,i] == 1
 
-  class_rel <- as.data.frame(colSums(test_labs[true_i,]))
+  class_rel <- as.data.frame(t(colSums(test_labels[true_i,])))
+  row.names(class_rel) <- colnames(test_labels)[i]
+  return(class_rel)
+}
+
+get_confusion_row <- function(i, test_labels, predictions, threshold = 0.2) {
+
+  true_i <- test_labels[,i] == 1
 
   preds_i <- predictions
   # Set prediction to NA if it's correct but not in the ith column
@@ -247,15 +255,115 @@ get_confusion_row <- function(i, test_labels, predictions, threshold = 0.2) {
   test_i_na[test_i_na > 1] <- NA
   preds_i[, -i] <- test_i_na[, -i]*preds[, -i]
 
-  metric <- as.data.frame(colMeans(preds_i[true_i,] >= threshold, na.rm = T))
+  metric <- as.data.frame(t(colMeans(preds_i[true_i,] >= threshold, na.rm = T)))
+  row.names(metric) <- colnames(test_labels)[i]
 
-  return(list(class_rel = class_rel, metric = metric))
+  return(metric)
 }
 
 get_confusion_matrix <- function(predictions, test_labels, classes, threshold = 0.2) {
-  res <- purrr::map(1:length(classes), get_confusion_row,
-                    test_labels = test_labels, predictions = predictions,
-                    threshold = threshold)
+  class_vec <- 1:length(classes) %>% set_names(classes)
+
+  stopifnot(length(threshold) %in% c(length(classes), 1))
+
+  if (length(threshold) == 1) {
+    purrr::map_df(class_vec, get_confusion_row,
+                  test_labels = test_labels, predictions = predictions,
+                  threshold = threshold) %>%
+      set_names(paste0("pred_", classes)) %>%
+      set_rownames(classes)
+  } else if (length(threshold) == length(classes)) {
+    purrr::map2_df(class_vec, threshold,
+                   ~get_confusion_row(
+                     i = .x,
+                     test_labels = test_labels, predictions = predictions,
+                     threshold = .y)) %>%
+      set_names(paste0("pred_", classes)) %>%
+      set_rownames(classes)
+  }
+
+}
+
+get_count_matrix <- function(test_labels, classes) {
+  class_vec <- 1:length(classes) %>% set_names(classes)
+  purrr::map_df(class_vec, get_image_count_row,
+                              test_labels = test_labels) %>%
+    set_rownames(paste0("pred_", classes))
+}
+
+# load(file.path(get_newest()$path, get_newest()$base_file))
+# get_confusion_matrix(predictions, test_labels, classes, threshold = 0.2) %>%
+#   set_names(classes) %>%
+#   ggcorrplot(., hc.order = F, outline.col = "white", lab = T) +
+#   scale_fill_gradient("Classification\nRate", low = "white", high = "cornflowerblue", limits = c(0, 1)) +
+#   scale_x_discrete("Truth") + scale_y_discrete("Prediction") +
+#   theme(axis.title.x = element_text(size = 14), axis.title.y = element_text(size = 14, angle = 90, vjust = 1)) +
+#   ggtitle("CNN Multi-Class Confusion Matrix")
 
 
+# --- # ROC Curves # -----------------------------------------------------------
+
+get_accuracy <- function(x, preds, labels) {
+  pred_mat <- preds >= x
+
+  pos <- colSums(labels)
+  neg <- colSums(!labels)
+
+  tp <- colSums(labels & pred_mat)
+  fp <- colSums(!labels & pred_mat)
+
+  tpr <- tp/pos
+  fpr <- fp/neg
+
+  data.frame(cutoff = x, class = names(tpr), tpr = as.numeric(tpr), fpr = as.numeric(fpr))
+}
+
+get_allclass_accuracy <- function(x, preds, labels) {
+  pred_mat <- preds >= x
+
+  pos <- rowSums(labels)
+  neg <- rowSums(!labels)
+
+  tp <- rowSums(labels & pred_mat)
+  fp <- rowSums(!labels & pred_mat)
+
+  tpr <- tp/pos
+  tpr[pos == 0] <- NA
+  fpr <- fp/neg
+  fpr[neg == 0] <- NA
+
+  data.frame(cutoff = x, tpr = mean(tpr, na.rm = T), fpr = mean(fpr, na.rm = T))
+}
+
+eer <- function(df) {
+  stopifnot("tpr" %in% names(df), "fpr" %in% names(df))
+  tpr <- df$tpr
+  fpr <- df$fpr
+  fnr <- 1 - tpr
+
+  df[which.min(abs(fnr - fpr)),]
+}
+
+plot_onehot_roc <- function(preds, labels, classes = default_classes) {
+  cv <- 1:ncol(preds) %>% set_names(classes)
+  tmp <- purrr::map(cv, ~pROC::roc(labels[,.], preds[,.]))
+
+  roc_data <- purrr::map_df(tmp, ~data_frame(tpr = .$sensitivities, fpr = 1 - .$specificities,
+                                             thresholds = .$thresholds,
+                                             auc = .$auc[1]), .id = "class") %>%
+    nest(tpr, fpr, thresholds, .key =  "roc_plot") %>%
+    mutate(eer = purrr::map(roc_plot, eer))
+
+  roc_data$rocs <- tmp
+
+  p <- ggplot() +
+    geom_line(aes(x = fpr, y = tpr), data = unnest(roc_data, roc_plot)) +
+    geom_text(aes(x = 1, y = 0, label = sprintf("AUC: %0.2f", auc)), hjust = 1, vjust = -0.2, data = roc_data) +
+    geom_point(aes(x = fpr, y = tpr, color = "Equal Error\nRate"), data = unnest(roc_data, eer)) +
+    scale_color_manual("", values = "black") +
+    facet_wrap(~class) +
+    scale_x_continuous("False Positive Rate", breaks = c(0, .25, .5, .75, 1), labels = c("0.0", "", "0.5", "", "1.0")) +
+    scale_y_continuous("True Positive Rate", breaks = c(0, .25, .5, .75, 1), labels = c("0.0", "", "0.5", "", "1.0"))
+
+  invisible(list(data = roc_data, plot = p))
 }
