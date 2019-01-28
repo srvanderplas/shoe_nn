@@ -1,4 +1,6 @@
 library(magrittr)
+library(purrr)
+library(dplyr)
 library(lubridate)
 library(stringr)
 library(jpeg)
@@ -8,6 +10,9 @@ library(tidyr)
 library(magick)
 library(viridis)
 library(ggcorrplot)
+library(deepviz)
+library(tidygraph)
+library(ggraph)
 
 # --- Variables ----------------------------------------------------------------
 default_classes <- c(
@@ -376,3 +381,99 @@ plot_onehot_roc <- function(preds, labels, classes = default_classes) {
 
   invisible(list(data = roc_data, plot = p))
 }
+
+# --- Dense Layers -------------------------------------------------------------
+make_node_name <- function(level, label){
+  paste("l", level, label, sep = "_")
+}
+
+
+make_nodes_df <- function(n){
+
+  map_dfr(
+    seq_along(n),
+    function(i){
+      label = seq_len(n[i])
+      tibble(
+        label = label %>% as.character(),
+        node = make_node_name(i, label)
+      )
+    }
+  ) %>%
+    mutate(
+      id = seq_along(node),
+      type = NA,
+    ) %>%
+    select(id, type, label, node)
+}
+
+
+make_edges_df <- function(n, nodes = make_nodes_df(n)){
+
+  embedded_nodes <- n %>%
+    embed(dimension = 2) %>%
+    .[, c(2, 1)] %>%
+    matrix(ncol = 2)
+
+  map_dfr(seq_len(length(n) - 1), function(i){
+    level <-  i
+    emb <- embedded_nodes[i, ]
+    from <-  rep(seq_len(emb[1]), each = emb[2])
+    to <-  rep(seq_len(emb[2]), emb[1])
+    tibble(
+      from = make_node_name(level, from),
+      to = make_node_name(level + 1, to)
+    )
+  }) %>%
+    left_join(nodes, by = c("from" = "node")) %>%
+    select(to, id) %>%
+    rename(from = id) %>%
+    left_join(nodes, by = c("to" = "node")) %>%
+    select(from, id) %>%
+    rename(to = id)
+}
+
+
+layout_keras <- function(graph, n_nodes){
+  positions <- map_dfr(seq_along(n_nodes), function(i){
+    max_nodes <- max(n_nodes)
+    layers <- length(n_nodes)
+    data.frame(
+      x = seq_len(n_nodes[i]) / (n_nodes[i] + 1) * layers,
+      y = length(n_nodes) - i
+    )
+  })
+  ggraph:::layout_igraph_manual(graph, positions, circular = FALSE)
+}
+
+plot_deepviz2 <- function(n, edge_col = "grey50", line_type = "solid", rad = .1){
+  nodes <- make_nodes_df(n)
+  edges <- make_edges_df(n)
+
+  tbl_graph(nodes = nodes, edges = edges) %>%
+    ggraph(layout = "manual", node.position = layout_keras(., n)) +
+    geom_edge_diagonal0(edge_colour = edge_col, linetype = line_type) +
+    geom_node_circle(aes(r = rad), fill = "grey40") +
+    coord_fixed() +
+    theme_void()
+}
+
+
+plot_deepviz_sample <- function(n, dropout_rate = .5, edge_col = c("grey50", "grey80"),
+                                line_type = c("solid", "22"), rad = .1){
+  nodes <- make_nodes_df(n)
+  edges <- make_edges_df(n)
+
+  edges$dropout <- sample(c(0, 1), size = nrow(edges), replace = T, prob = c(dropout_rate, 1 - dropout_rate)) %>% factor(levels = c(0, 1), labels = c("FALSE", "TRUE"))
+
+  tbl_graph(nodes = nodes, edges = edges) %>%
+    ggraph(layout = "manual", node.position = layout_keras(., n)) +
+    geom_edge_diagonal0(aes(edge_colour = dropout, linetype = dropout)) +
+    scale_edge_color_manual("Dropout", values = c("TRUE" = edge_col[2], "FALSE" = edge_col[1])) +
+    scale_edge_linetype_manual("Dropout", values = c("TRUE" = line_type[2], "FALSE" = line_type[1])) +
+    geom_node_circle(aes(r = rad), fill = "grey40") +
+    coord_fixed() +
+    theme_void()
+}
+
+# ------------------------------------------------------------------------------
