@@ -203,13 +203,18 @@ create_composite <- function(heatmap_data, save_file = F, outdir = ".", td = tem
     }
   }
 
-  composite_image <-   c(
-    image_append(c(blank_img, unmod_image, blank_img), stack = T),
-    image_append(filelist[1:3], stack = T),
-    image_append(filelist[4:6], stack = T),
-    image_append(filelist[7:9], stack = T)
-  ) %>%
-    image_append()
+  if (length(filelist) == 9) {
+    composite_image <-   c(
+      image_append(c(blank_img, unmod_image, blank_img), stack = T),
+      image_append(filelist[1:3], stack = T),
+      image_append(filelist[4:6], stack = T),
+      image_append(filelist[7:9], stack = T)
+    ) %>%
+      image_append()
+  } else {
+    composite_image <- image_append(c(unmod_image, filelist), stack = F)
+  }
+
 
   if (save_file) {
     final_save_file <- file.path(outdir,
