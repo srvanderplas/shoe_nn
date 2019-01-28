@@ -68,7 +68,10 @@ if (length(data_dirs) > 0) {
   data_dir_date <- as.Date("1900-01-01")
 }
 
-run_process_script <- data_dir_date <= last_mod_date
+data_dir_date <- trunc(data_dir_date)
+last_mod_date <- trunc(last_mod_date)
+
+run_process_script <- data_dir_date < last_mod_date
 rm(dirs, data_dirs, data_dir_date)
 
 ################################################################################
