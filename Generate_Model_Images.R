@@ -26,7 +26,7 @@ default_classes <- c(
 get_newest <- function(dir = "~/models/shoe_nn/TrainedModels/", pattern = "fullimage.rdata") {
   dirlist <- list.dirs(path = dir) %>% rev()
   newest_file <- NULL
-  startidx <- 1:10
+  startidx <- 1:pmin(length(dirlist) - 1, 10)
   while (is.null(newest_file) & max(startidx) <= length(dirlist)) {
     newest_file <- dirlist %>%
       magrittr::extract(startidx) %>%
