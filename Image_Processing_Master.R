@@ -164,3 +164,4 @@ if (run_process_script) {
 # Run Model
 
 source("../vgg16_augment_onehot_automation.R")
+# source("../vgg16_augment_truncation.R")
