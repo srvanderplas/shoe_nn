@@ -79,11 +79,9 @@ rm(dirs, data_dirs, data_dir_date)
 # Set up Processing Environment
 
 # Create directory if it doesn't exist
-if (run_process_script) {
-  process_dir <- format(last_mod_date, "%Y%m%d-%H%M%S")
-  if (!dir.exists(process_dir)) {
-    dir.create(process_dir)
-  }
+process_dir <- format(last_mod_date, "%Y%m%d-%H%M%S")
+if (!dir.exists(process_dir)) {
+  dir.create(process_dir)
 }
 
 # Run processing script
