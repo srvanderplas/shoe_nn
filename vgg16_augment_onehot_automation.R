@@ -24,7 +24,7 @@ if (!exists("process_dir")) {
 }
 
 if (!exists("aug_multiple")) {
-  aug_multiple <- 3
+  aug_multiple <- 2
 }
 
 if (!exists("epochs")) {
@@ -70,57 +70,61 @@ img_names <- list.files(train_dir) %>% str_remove(., "\\.jpg")
 img_loc <- list.files(train_dir, full.names = T)
 
 augment_img <- function(filename, times = 3) {
-  # Determine number of times augmentation should happen
-  rep_num <- str_extract(basename(filename), "^\\d") %>% as.numeric()
+  if (!str_detect(filename, "^aug_")) {
+    # Determine number of times augmentation should happen
+    rep_num <- str_extract(basename(filename), "^\\d") %>% as.numeric()
 
-  if (!is.na(rep_num)) {
-    file_dir <- dirname(filename)
-    base_file_name <- file.path(file_dir, str_remove(basename(filename), "^\\d{1,}\\+"))
-    file.rename(filename, base_file_name)
-    newfilepath <- base_file_name
-    newfilename <- basename(base_file_name) %>% str_remove("\\.jpg")
-  } else {
-    rep_num <- 1
-    newfilepath <- filename
-    newfilename <- basename(filename) %>% str_remove("\\.jpg")
-  }
-
-  img <- readJPEG(newfilepath)
-  dim(img) <- c(1, dim(img))
-
-  aug_generator <- image_data_generator(
-    samplewise_std_normalization = T,
-    rotation_range = 40,
-    width_shift_range = 0.05,
-    height_shift_range = 0.05,
-    shear_range = 60,
-    zoom_range = 0.1,
-    channel_shift_range = .1,
-    zca_whitening = T,
-    vertical_flip = T,
-    horizontal_flip = TRUE
-  )
-
-  images_iter <- flow_images_from_data(
-    x = img, y = NULL,
-    generator = aug_generator,
-    batch_size = 1,
-    save_to_dir = train_aug_dir,
-    save_prefix = paste("aug", newfilename, sep = "_"),
-    save_format = "jpg"
-  )
-
-  iter_num <- times
-  while (rep_num > 0) {
-    while (iter_num > 0) {
-      reticulate::iter_next(images_iter)
-      iter_num <- iter_num - 1
+    if (!is.na(rep_num)) {
+      file_dir <- dirname(filename)
+      base_file_name <- file.path(file_dir, str_remove(basename(filename), "^\\d{1,}\\+"))
+      file.rename(filename, base_file_name)
+      newfilepath <- base_file_name
+      newfilename <- basename(base_file_name) %>% str_remove("\\.jpg")
+    } else {
+      rep_num <- 1
+      newfilepath <- filename
+      newfilename <- basename(filename) %>% str_remove("\\.jpg")
     }
-    rep_num <- rep_num - 1
+
+    img <- readJPEG(newfilepath)
+    dim(img) <- c(1, dim(img))
+
+    aug_generator <- image_data_generator(
+      samplewise_std_normalization = T,
+      rotation_range = 40,
+      width_shift_range = 0.05,
+      height_shift_range = 0.05,
+      shear_range = 60,
+      zoom_range = 0.1,
+      channel_shift_range = .1,
+      zca_whitening = T,
+      vertical_flip = T,
+      horizontal_flip = TRUE
+    )
+
+    images_iter <- flow_images_from_data(
+      x = img, y = NULL,
+      generator = aug_generator,
+      batch_size = 1,
+      save_to_dir = train_aug_dir,
+      save_prefix = paste("aug", newfilename, sep = "_"),
+      save_format = "jpg"
+    )
+
+    iter_num <- times
+    while (rep_num > 0) {
+      while (iter_num > 0) {
+        reticulate::iter_next(images_iter)
+        iter_num <- iter_num - 1
+      }
+      rep_num <- rep_num - 1
+    }
   }
 }
 
-for (i in list.files(train_dir, "*.jpg", full.names = T)) {
+augment_img_list <- list.files(train_dir, "*.jpg", full.names = T)
+augment_img_list <- augment_img_list[!str_detect(augment_img_list, "^aug_")]
+for (i in augment_img_list) {
   augment_img(i, times = aug_multiple)
 }
 
