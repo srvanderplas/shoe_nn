@@ -25,6 +25,7 @@ classes <- c(
   "quad", "star", "text", "triangle"
 )
 aug_multiple <- 1
+contrast_correct <- T # Automatically adjust image contrast (by color channel?)
 epochs <- 30
 
 ################################################################################
