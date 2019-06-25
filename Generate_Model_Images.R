@@ -76,6 +76,115 @@ set_weights <- function(model_wts_file) {
   load_model_weights_hdf5(model, model_wts_file, by_name = T)
 }
 
+# --- # Model predictions # ----------------------------------------------------
+predict_new <- function(img_path, model, classes = default_classes) {
+  purrr::map(img_path, function(x) {
+    img <- jpeg::readJPEG(x)
+    dim(img) <- c(1, dim(img))
+
+    predictions <- model %>%
+      predict(img, verbose = T) %>%
+      as.vector() %>%
+      set_names(classes)
+
+    list(img = img, path = x, pred = predictions)
+  })
+}
+
+pred_prob_plot <- function(img_path, model, classes = default_classes) {
+  img_preds <- predict_new(img_path, model)
+
+  img_preds_mat <- purrr::map_dfc(img_preds, "pred") %>%
+    t()
+
+  tmp <- hclust(dist(img_preds_mat))
+  img_preds_df <- img_preds_mat %>%
+    as.data.frame() %>%
+    set_colnames(default_classes) %>%
+    set_rownames(purrr::map_chr(img_preds, "path") %>% basename() %>% str_remove("\\.jpg")) %>%
+    mutate(path = purrr::map_chr(img_preds, "path")) %>%
+    # mutate(name = rownames(.)) %>%
+    arrange(tmp$order) %>%
+    mutate(idx = row_number())
+
+  img_preds_df_long <- img_preds_df %>%
+    select(idx, 1:length(classes)) %>%
+    gather(key = "class", value = value, -idx)
+
+  features_xraster <- purrr::map2(img_preds_df$path, img_preds_df$idx,
+                                  ~annotation_custom(grid::rasterGrob(readJPEG(.x), interpolate = T),
+                                                     ymin = .y - .5, ymax = .y + .5,
+                                                     xmin = -0.5, xmax = 0.5))
+
+  ggplot() +
+    geom_tile(aes(y = idx, x = as.numeric(factor(class)), fill = value), data = img_preds_df_long, color = "black") +
+    geom_text(aes(x = as.numeric(factor(class)), y = idx, label = sprintf("%0.2f", value)), data = img_preds_df_long, hjust = 0.5, vjust = 0.5) +
+    scale_fill_gradient("Predicted\nProbability", low = "#FFFFFF", high = "cornflowerblue", limits = c(0, 1)) +
+    features_xraster +
+    coord_fixed() +
+    scale_x_continuous(limits = c(-0.5, 9.5), breaks = 1:9, labels = default_classes, expand = c(0,0)) +
+    scale_y_continuous(limits = c(.5, length(img_path) + .5), expand = c(0,0)) +
+    theme(axis.text.y = element_blank(), axis.title = element_blank(), axis.ticks.y = element_blank())
+
+}
+
+pred_dist_plot <- function(img_path, model, classes = default_classes) {
+  img_preds <- predict_new(img_path, model)
+
+  img_preds_mat <- purrr::map_dfc(img_preds, "pred") %>%
+    t()
+
+  img_dist <- dist(img_preds_mat)
+
+  tmp <- hclust(img_dist)
+
+  img_preds_df <- img_preds_mat %>%
+    as.data.frame() %>%
+    set_colnames(default_classes) %>%
+    set_rownames(purrr::map_chr(img_preds, "path") %>% basename() %>% str_remove("\\.jpg")) %>%
+    mutate(path = purrr::map_chr(img_preds, "path")) %>%
+    mutate(id = row_number()) %>%
+    # mutate(name = rownames(.)) %>%
+    arrange(tmp$order) %>%
+    mutate(idx = row_number())
+
+  features_dist <- img_dist %>%
+    as.matrix() %>%
+    as.data.frame() %>%
+    mutate(i = rownames(.)) %>%
+    tidyr::gather(key = "j", value = "dist", -i) %>%
+    mutate(pval = sprintf("%.02f", dist)) %>%
+    mutate(i = readr::parse_number(i), j = readr::parse_number(j)) %>%
+    left_join(select(img_preds_df, id, i_new = idx), by = c("i" = "id")) %>%
+    left_join(select(img_preds_df, id, j_new = idx), by = c("j" = "id")) %>%
+    bind_rows(tibble(i_new = 0, i = 0, j = 1:length(img_path), j_new = j, dist = NA),
+              tibble(j_new = 0, j = 0, i = 1:length(img_path), i_new = i, dist = NA))
+
+
+  features_xraster <- map2(img_preds_df$path, img_preds_df$idx,
+                           ~annotation_custom(grid::rasterGrob(readJPEG(.x), interpolate = T),
+                                              xmin = .y - .5, xmax = .y + .5,
+                                              ymin = -0.5, ymax = 0.5))
+  features_yraster <- map2(img_preds_df$path, img_preds_df$idx,
+                           ~annotation_custom(grid::rasterGrob(readJPEG(.x), interpolate = T),
+                                              ymin = .y - .5, ymax = .y + .5,
+                                              xmin = -0.5, xmax = 0.5))
+
+  ggplot() +
+    geom_tile(aes(x = i_new, y = j_new, fill = dist), data = features_dist, color = "grey50") +
+    geom_text(aes(x = i_new, y = j_new, label = pval), data = features_dist) +
+    scale_fill_gradient("Euclidean\nDistance", low = "white", high = "cornflowerblue", na.value = "transparent") +
+    coord_fixed() +
+    scale_x_continuous(limits = c(-0.5, length(img_path) + .5), expand = c(0,0)) +
+    scale_y_continuous(limits = c(-0.5, length(img_path) + .5), expand = c(0,0)) +
+    features_xraster + features_yraster +
+    ggtitle("Pairwise Distance") +
+    theme_void() +
+    theme(plot.background = element_rect(fill = "transparent", color = NA), panel.grid = element_blank(),
+          axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(),
+          panel.background = element_blank(), plot.title = element_text(size = 18, margin = unit(c(0, 0, 0, 0), "mm")),
+          plot.subtitle = element_blank())
+}
 
 # --- # Heatmaps # -------------------------------------------------------------
 calc_heatmap <- function(img_path, model, classes = default_classes, scale_by_prob = F) {
@@ -382,6 +491,7 @@ plot_onehot_roc <- function(preds, labels, classes = default_classes) {
   invisible(list(data = roc_data, plot = p))
 }
 
+
 # --- Dense Layers -------------------------------------------------------------
 make_node_name <- function(level, label){
   paste("l", level, label, sep = "_")
@@ -474,6 +584,54 @@ plot_deepviz_sample <- function(n, dropout_rate = .5, edge_col = c("grey50", "gr
     geom_node_circle(aes(r = rad), fill = "grey40") +
     coord_fixed() +
     theme_void()
+}
+
+
+plot_deepviz_arrows <- function(n, edge_col = "grey50",
+                                line_type = "solid", rad = .1){
+  nodes <- make_nodes_df(n)
+  edges <- make_edges_df(n)
+
+  tbl_graph(nodes = nodes, edges = edges) %>%
+    ggraph(layout = "manual", node.position = layout_keras(., n)) +
+    geom_edge_link(edge_colour = edge_col, linetype = line_type,
+                   arrow = arrow(length = unit(2, 'mm'),
+                                 type = "closed", angle = 20),
+                   end_cap = circle(5, 'mm')) +
+    geom_node_circle(aes(r = rad), fill = "grey95") +
+    coord_fixed() +
+    theme_void()
+}
+
+plot_deepviz_dropout <- function(n, rm_nodes, cross_out = F, r = .1) {
+  nodes <- make_nodes_df(n)
+  edges <- make_edges_df(n)
+
+  rm_rows <- (edges$from %in% rm_nodes) | (edges$to %in% rm_nodes)
+  edges <- edges[!rm_rows,]
+
+  plot <- tbl_graph(nodes = nodes, edges = edges) %>%
+    ggraph(layout = "manual", node.position = layout_keras(., n)) +
+    geom_edge_link(edge_colour = "grey50", linetype = "solid",
+                   arrow = arrow(length = unit(2, 'mm'),
+                                 type = "closed", angle = 20),
+                   end_cap = circle(5, 'mm')) +
+    geom_node_circle(aes(r = r), fill = "grey95") +
+    coord_fixed() +
+    theme_void()
+  if(cross_out) {
+    centers <- data.frame(x = plot$data$x, y = plot$data$y)[rm_nodes,]
+    d <- r / sqrt(2)
+    centers$xl <- centers$x - d
+    centers$xu <- centers$x + d
+    centers$yl <- centers$y - d
+    centers$yu <- centers$y + d
+    plot +
+      geom_segment(aes(x = xl, xend = xu, y = yl, yend = yu),
+                   data = centers, size = .7) +
+      geom_segment(aes(x = xu, xend = xl, y = yl, yend = yu),
+                   data = centers, size = .7)
+  } else {plot}
 }
 
 # ------------------------------------------------------------------------------
