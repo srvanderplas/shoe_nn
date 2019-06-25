@@ -45,6 +45,15 @@ crop_images(source_dir, output_dir)
 img_stats <- debug_image(dir = output_dir)
 
 # Get features
+
+# Split features into chunks of ~2000 images
+features <- tibble(file = get_folder_files(output_dir, pattern = ".jpg"))
+
+cutn <- cut_number(1:nrow(features), n = floor(nrow(features)/2000))
+features_chunked <- features %>%
+  mutate(i = cutn) %>%
+  split(.$i)
+
 features <- furrr::future_map_dfr(get_folder_files(output_dir, pattern = ".jpg"),
                                   extract_features, model = loaded_model)
 
