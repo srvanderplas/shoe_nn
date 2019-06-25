@@ -130,6 +130,43 @@ extract_features <- function(img_path, model, classes) {
                   img = basename(img_path))
 }
 
+#' Extract features from set of images and save to separate file.
+#'
+#' Process images in batches (chunks) to ensure that
+#'
+#' @param img_list character vector of file paths
+#' @param chunk_size number of images to process per chunk
+#' @param out_dir File path/name to write output data to. The directory will
+#'          be created and sub-files will be stored inside the directory; these
+#'          files can be later appended.
+#'          For instance, to write the files to /home/user/model_features,
+#'          pass in "/home/user/model_features"; the files will be stored in
+#'          this folder as model_features_1.csv, ..., model_features_n.csv.
+#' @param model Keras model used to calculate output features
+#' @param classes classes used to train the model (for labeling the resulting data frame)
+extract_features_df <- function(img_list, chunk_size = 200, out_dir = "features", ...) {
+  if (!dir.exists(out_dir)) dir.create(out_dir)
+
+  bn <- basename(out_dir)
+
+  n_chunks <- round(length(img_list)/200)
+  chunked_df <- tibble(img_path = img_list,
+                       i = as.numeric(cut_number(1:length(img_list), n_chunks)))
+
+  parallel_features <- function(files, fcn = furrr::future_map_dfr, ...) {
+    fcn(files, extract_features, ...)
+  }
+
+  for (j in 1:n_chunks) {
+    tmp <- filter(chunked_df, i == j) %>% try(parallel_features(files = .$img_path, ...))
+    if (!"try-error" %in% class(tmp)) {
+      readr::write_csv(tmp, path = file.path(csvpath, paste0(bn, "_", j, ".csv")))
+    } else {
+      writeLines(sprintf("Error in chunk %d: %s", j, tmp), con = file.path(out_dir, paste0(bn, "_", j, ".txt")))
+    }
+  }
+}
+
 #' Get image information (debugging)
 #'
 #' @param dir directory of images
