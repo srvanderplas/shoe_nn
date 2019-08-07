@@ -28,7 +28,7 @@ if (!exists("aug_multiple")) {
 }
 
 if (!exists("epochs")) {
-  epochs <- 30
+  epochs <- 15
 }
 
 process_dir <- gsub("[[:punct:]]models[[:punct:]]shoe_nn[[:punct:]]RProcessedImages[[:punct:]]{1,}", "\\1", process_dir)
@@ -38,7 +38,9 @@ process_dir <- gsub("^[/\\\\]{1,}", "", process_dir)
 work_dir <- "/models/shoe_nn/TrainedModels"
 start_date <- Sys.time() %>% gsub(" ", "_", .)
 model_dir <- file.path(work_dir, process_dir)
-dir.create(model_dir)
+if (!dir.exists(model_dir)) {
+  dir.create(model_dir)
+}
 
 name_file <- function(date, ext) {
   pretrained_base <- "vgg16"
@@ -101,29 +103,32 @@ augment_img <- function(filename, times = 3) {
       vertical_flip = T,
       horizontal_flip = TRUE
     )
+  }
+  images_iter <- flow_images_from_data(
+    x = img, y = NULL,
+    generator = aug_generator,
+    batch_size = 1,
+    save_to_dir = train_aug_dir,
+    save_prefix = paste("aug", newfilename, sep = "_"),
+    save_format = "jpg"
+  )
 
-    images_iter <- flow_images_from_data(
-      x = img, y = NULL,
-      generator = aug_generator,
-      batch_size = 1,
-      save_to_dir = train_aug_dir,
-      save_prefix = paste("aug", newfilename, sep = "_"),
-      save_format = "jpg"
-    )
-
-    iter_num <- times
-    while (rep_num > 0) {
-      while (iter_num > 0) {
-        reticulate::iter_next(images_iter)
-        iter_num <- iter_num - 1
-      }
-      rep_num <- rep_num - 1
+  iter_num <- times
+  while (rep_num > 0) {
+    while (iter_num > 0) {
+      reticulate::iter_next(images_iter)
+      iter_num <- iter_num - 1
     }
+    rep_num <- rep_num - 1
   }
 }
 
 augment_img_list <- list.files(train_dir, "*.jpg", full.names = T)
+prev_augmented_images <- augment_img_list[str_detect(augment_img_list, "^aug_")] %>%
+  str_replace("aug_", "") %>%
+  unique()
 augment_img_list <- augment_img_list[!str_detect(augment_img_list, "^aug_")]
+augment_img_list <- augment_img_list[!augment_img_list %in% prev_augmented_images]
 for (i in augment_img_list) {
   augment_img(i, times = aug_multiple)
 }
